@@ -15,7 +15,7 @@
 default: &default
   adapter: postgresql
   encoding: unicode
-  database: devices_api_development
+  database: mydb
   username: postgres
   password: password
   host: localhost

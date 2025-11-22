@@ -64,7 +64,7 @@ create db
 default: &default
   adapter: postgresql
   encoding: unicode
-  database: devices_api_development
+  database: mydb
   username: postgres
   password: password
   host: localhost
@@ -147,15 +147,15 @@ has_secure_password dùng bcrypt, bạn sẽ tạo user bằng password/password
 
 5 — Tạo Device model
 
-Generator:
+<!-- Generator:
 
 rails g model Device info:text status:string
-rails db:migrate
+rails db:migrate -->
 
 
 app/models/device.rb:
 
-class Device < ApplicationRecord
+<!-- class Device < ApplicationRecord
   validates :info, presence: true
   validates :status, inclusion: { in: %w[stopped running unknown], message: "%{value} not allowed" }, allow_nil: true
 
@@ -164,10 +164,64 @@ class Device < ApplicationRecord
   def set_default_status
     self.status ||= 'unknown'
   end
+end -->
+```
+class Device
+    include ActiveModel::Model 
+    include ActiveModel::Attributes
+
+    attribute :id, :integer
+    attribute :info, :string
+    attribute :status, :string, default: "unknown"
+
+    #=== CRUD FUNCTIONS ===
+    def self.all
+        sql = 'SELECT * FROM devices ORDER BY id'
+        result= PG_CONN.exec(sql)
+        result.map do |row|
+            Device.new(
+                id: row["id"].to_i,
+                info: row["info"],
+                status: row["status"]
+            )
+        end
+    end
+
+    def self.find(id)
+        sql = "SELECT * FROM devices WHERE id= $1 LIMIT 1"
+        result = PG_CONN.exec_params(sql, [id])
+        return nil if result.ntuples==0
+
+        row= result[0]
+        Device.new(
+            id: row["id"].to_i,
+            info: row["info"],
+            status: row["status"]
+        )
+    end
+    def save
+        sql = "INSERT INTO devices (info, status) VALUES ($1, $2) RETURNING id"
+        result = PG_CONN.exec_params(sql, [info, status])
+        self.id = result[0]["id"].to_i
+        true
+    end
+    def update(attrs)
+        self.info   = attrs[:info]   if attrs[:info]
+        self.status = attrs[:status] if attrs[:status]
+    
+        sql = "UPDATE devices SET info=$1, status=$2 WHERE id=$3"
+        PG_CONN.exec_params(sql, [info, status, id])
+        true
+    end
+    
+    def destroy
+        sql = "DELETE FROM devices WHERE id = $1"
+        PG_CONN.exec_params(sql, [id])
+        true
+    end
 end
+```
 
-
-Ở đây status là 'unknown'/'running'/'stopped'.
 
 6 — ApplicationController: token auth helper
 
@@ -381,58 +435,58 @@ Mở rails console:
 User.create!(email: 'test@example.com', password: '123456', password_confirmation: '123456')
 
 
-(hoặc dùng endpoint /register)
 
-12 — Chạy server
+
+12 — start server
 rails server -p 3000
 
-13 — Test bằng curl (toàn bộ quy trình)
+13 — Test with curl 
 
-Đăng ký (nếu cần):
+
 
 curl -X POST http://localhost:3000/register \
   -H "Content-Type: application/json" \
   -d '{"user":{"email":"test@example.com","password":"123456","password_confirmation":"123456"}}'
 
 
-Login → nhận token:
+Login → get token:
 
 curl -X POST http://localhost:3000/login \
   -H "Content-Type: application/json" \
   -d '{"user":{"email":"test@example.com","password":"123456"}}'
 
 
-Response ví dụ:
+Response :
 
 {"message":"Logged in","token":"eyJhbGci...","user":{"id":1,"email":"test@example.com"}}
 
 
-Lưu token.
+save token. 
 
-Tạo device:
+create device:
 
 curl -X POST http://localhost:3000/devices \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3NjM4Njc5Njl9.sbtW-PwARvS6Y9pU_n-rG5p2Oy23tKdC2wddXAnTtsU" \
   -d '{"device":{"info":"Device A, location: lab"}}'
 
 
 List devices:
 
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/devices
+curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3NjM4NjgzNTF9.wTxHb098FBZ7SZuc5-JsK6dqwLnmZfNbsKMip1VJ3RY" http://localhost:3000/devices
 
 
-Gửi lệnh start:
+send command `start`:
 
 curl -X POST http://localhost:3000/devices/1/command \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3NjM4NjgzNTF9.wTxHb098FBZ7SZuc5-JsK6dqwLnmZfNbsKMip1VJ3RY" \
   -d '{"command":"start"}'
 
 
-Lấy trạng thái:
+get status
 
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/devices/1/status
+curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3NjM4NjgzNTF9.wTxHb098FBZ7SZuc5-JsK6dqwLnmZfNbsKMip1VJ3RY" http://localhost:3000/devices/1/status
 
 
 Response:

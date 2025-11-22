@@ -7,5 +7,11 @@ Rails.application.routes.draw do
   post "/login", to: "auth#login"
   # Defines the root path route ("/")
   # root "posts#index"
+  resources :devices do
+    member do
+      post :command
+      get :status
+    end
+  end
 end
 
